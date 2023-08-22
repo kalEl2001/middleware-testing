@@ -97,10 +97,11 @@ export default async function middleware(req, ev) {
   console.log("DEBUGDEBUGDEBUG");
   console.log(user);
   const selfUser = await kv.get(user);
+  console.log(selfUser);
   //   check if self user is in room
   if (selfUser.status === "in_room") {
-    return NextResponse.redirect(new URL("/room", req.url));
+    return NextResponse.rewrite(new URL("/room", req.url));
   } else {
-    return NextResponse.redirect(new URL("/waiting", req.url));
+    return NextResponse.rewrite(new URL("/waiting", req.url));
   }
 }

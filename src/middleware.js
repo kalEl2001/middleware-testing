@@ -1,4 +1,5 @@
 import { kv } from "@vercel/kv";
+import { NextURL } from "next/dist/server/web/next-url";
 import { NextResponse } from "next/server";
 
 const COOKIE_NAME_ID = "__waiting_room_id";
@@ -16,7 +17,7 @@ const makeid = (length) => {
   return result;
 };
 
-const createNewUserId = async (req) => {
+const createNewUserId = async (res) => {
   while (true) {
     const newId = makeid(8);
     const user = await kv.get(newId);
@@ -35,22 +36,23 @@ const createNewUserId = async (req) => {
           ttl: 60 * 2,
         }
       );
-      req.cookies.set(COOKIE_NAME_ID, newId, {
-        maxAge: 60 * 60 * 24 * 365,
-      });
-      req.cookies.set(COOKIE_NAME_TIME, Date.now(), {
-        maxAge: 60 * 60 * 24 * 365,
-      });
       return newId;
     }
   }
 };
 
 export default async function middleware(req, ev) {
+  const res = new NextResponse();
   let user = req.cookies.get(COOKIE_NAME_ID)?.value;
 
   if (!user) {
     user = await createNewUserId(req);
+    res.cookies.set(COOKIE_NAME_ID, user, {
+      maxAge: 60 * 60 * 24 * 365,
+    });
+    res.cookies.set(COOKIE_NAME_TIME, Date.now(), {
+      maxAge: 60 * 60 * 24 * 365,
+    });
   } else {
     // update user last update time
     const userData = await kv.get(user);
@@ -59,11 +61,17 @@ export default async function middleware(req, ev) {
       await kv.set(userData.id, userData, {
         ttl: 60 * 2,
       });
-      req.cookies.set(COOKIE_NAME_TIME, Date.now(), {
+      res.cookies.set(COOKIE_NAME_TIME, Date.now(), {
         maxAge: 60 * 60 * 24 * 365,
       });
     } else {
-      user = await createNewUserId(req);
+      user = await createNewUserId(res);
+      res.cookies.set(COOKIE_NAME_ID, user, {
+        maxAge: 60 * 60 * 24 * 365,
+      });
+      res.cookies.set(COOKIE_NAME_TIME, Date.now(), {
+        maxAge: 60 * 60 * 24 * 365,
+      });
     }
   }
 
@@ -94,14 +102,12 @@ export default async function middleware(req, ev) {
   }
 
   // get latest self user
-  console.log("DEBUGDEBUGDEBUG");
-  console.log(user);
   const selfUser = await kv.get(user);
-  console.log(selfUser);
   //   check if self user is in room
   if (selfUser.status === "in_room") {
-    return NextResponse.rewrite(new URL("/room", req.url));
+    // redirect to base url + /room
+    return res.url(new NextURL("/room", req.url));
   } else {
-    return NextResponse.rewrite(new URL("/waiting", req.url));
+    return res.url(new NextURL("/waiting", req.url));
   }
 }
